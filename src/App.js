@@ -1,21 +1,32 @@
-import { Inertia } from '@inertiajs/inertia'
-import { createElement, useEffect, useState } from 'react'
+import HeadContext from './HeadContext'
 import PageContext from './PageContext'
+import { createHeadManager, Inertia } from '@inertiajs/inertia'
+import { createElement, useEffect, useMemo, useState } from 'react'
 
 export default function App({
   children,
   initialPage,
   axiosConfig,
+  initialComponent,
   resolveComponent,
-  resolveErrors,
-  transformProps,
+  titleCallback,
+  onHeadUpdate,
 })
 {
   const [current, setCurrent] = useState({
-    component: null,
-    page: {},
+    component: initialComponent || null,
+    page: initialPage,
     key: null,
   })
+
+  const headManager = useMemo(() =>
+  {
+    return createHeadManager(
+      typeof window === 'undefined',
+      titleCallback || (title => title),
+      onHeadUpdate || (() => { })
+    )
+  }, [])
 
   useEffect(() =>
   {
@@ -23,8 +34,6 @@ export default function App({
       initialPage,
       axiosConfig,
       resolveComponent,
-      resolveErrors,
-      transformProps,
       swapComponent: async ({ component, page, preserveState }) =>
       {
         setCurrent(current => ({
@@ -34,11 +43,11 @@ export default function App({
         }))
       },
     })
-  }, [initialPage, resolveComponent, resolveErrors, transformProps])
+  }, [])
 
   if (!current.component)
   {
-    return createElement(PageContext.Provider, { value: current.page }, null)
+    return createElement(HeadContext.Provider, { value: headManager }, createElement(PageContext.Provider, { value: current.page }, null))
   }
 
   const renderChildren = children || (({ Component, props, key }) =>
@@ -55,17 +64,17 @@ export default function App({
       return Component.layout
         .concat(child)
         .reverse()
-        .reduce((children, Layout) => createElement(Layout, { children }))
+        .reduce((children, Layout) => createElement(Layout, { children, ...props }))
     }
 
     return child
   })
 
-  return createElement(
-    PageContext.Provider,
-    { value: current.page },
-    renderChildren({ Component: current.component, key: current.key, props: current.page.props }),
-  )
+  return createElement(HeadContext.Provider, { value: headManager }, createElement(PageContext.Provider, { value: current.page }, renderChildren({
+    Component: current.component,
+    key: current.key,
+    props: current.page.props,
+  })))
 }
 
 App.displayName = 'Inertia'
